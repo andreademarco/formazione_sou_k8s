@@ -1,34 +1,11 @@
-// --- Funzione helper (presa dall’esercizio, leggermente adattata) ---
-def buildAndPushTag(Map args) {
-    def defaults = [
-        registryUrl: 'https://index.docker.io/v1/',
-        dockerfileDir: "./",
-        dockerfileName: "Dockerfile",
-        buildArgs: "",
-        pushLatest: true
-    ]
-    args = defaults + args
-
-    docker.withRegistry(args.registryUrl, args.registryCredentials) {
-        def image = docker.build(args.image, "${args.dockerfileDir} -f ${args.dockerfileName} ${args.buildArgs}")
-        image.push(args.buildTag)
-        if (args.pushLatest) {
-            image.push("latest")
-            sh "docker rmi --force ${args.image}:latest"
-        }
-        sh "docker rmi --force ${args.image}:${args.buildTag}"
-        return "${args.image}:${args.buildTag}"
-    }
-}
-
-// --- Pipeline dichiarativa principale ---
 pipeline {
     agent any
 
     environment {
+        DOCKER_HOST = "unix:///var/run/docker.sock"
         REGISTRY_URL = 'https://index.docker.io/v1/'
-        REGISTRY_CREDENTIALS = 'dockerhub-creds'  // ID delle credenziali salvate in Jenkins
-        DOCKER_IMAGE = 'your-dockerhub-username/flask-app-example'
+        REGISTRY_CREDENTIALS = 'dockerhub-creds'
+        DOCKER_IMAGE = 'andreademarco02/flask-app-example'
         DOCKER_TAG = "v${env.BUILD_NUMBER}"
     }
 
@@ -36,6 +13,12 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Docker Test') {
+            steps {
+                sh 'docker info'
             }
         }
 
