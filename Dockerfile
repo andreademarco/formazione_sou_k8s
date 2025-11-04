@@ -10,8 +10,7 @@ WORKDIR /app
 COPY requirements.txt /app
 
 # Installa le dipendenze elencate e usa una cache montata per evitare di riscaricare i pacchetti ogni volta (?)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install -r requirements.txt
+RUN pip3 install -r requirements.txt
 # Copia tutto il codice e lo script  ella directory del container
 COPY . /app
 
