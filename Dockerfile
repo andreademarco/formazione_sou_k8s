@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.4
 
 # Crea immagine chiamata builder e basata su python 3.10-apline
-FROM --platform=$BUILDPLATFORM python:3.10-alpine AS builder
+FROM python:3.10-alpine AS builder
 
 # Imposta directory di lavoro
 WORKDIR /app
