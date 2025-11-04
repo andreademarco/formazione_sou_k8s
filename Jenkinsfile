@@ -25,15 +25,11 @@ pipeline {
         stage('Build and Push Docker Image') {
             steps {
                 script {
-                    buildAndPushTag(
-                        registryUrl: REGISTRY_URL,
-                        registryCredentials: REGISTRY_CREDENTIALS,
-                        image: DOCKER_IMAGE,
-                        buildTag: DOCKER_TAG,
-                        dockerfileDir: './',
-                        dockerfileName: 'Dockerfile',
-                        pushLatest: true
-                    )
+                    docker.withRegistry(REGISTRY_URL, REGISTRY_CREDENTIALS) {
+                        def app = docker.build("${DOCKER_IMAGE}:${DOCKER_TAG}", "-f Dockerfile .")
+                        app.push()
+                        app.push("latest")
+                    }
                 }
             }
         }
