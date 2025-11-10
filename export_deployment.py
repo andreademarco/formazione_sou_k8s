@@ -1,74 +1,65 @@
 from kubernetes import client, config
 import json
+import sys
 
-# --- Configurazione Service Account ---
-# Se lo script è eseguito all'interno di un Pod che utilizza il Service Account 'cluster-reader',
-# questa funzione carica automaticamente la configurazione interna.
-# Altrimenti, useresti 'config.load_kube_config()' per un accesso esterno.
-try:
-    config.load_incluster_config()
-    print("Configurazione caricata utilizzando il Service Account in-cluster.")
-except config.config_exception.ConfigException:
-    print("Esecuzione esterna al cluster. Caricamento kubeconfig...")
-    config.load_kube_config() # Funziona se il file kubeconfig è disponibile.
-
-
-# --- Dettagli del Deployment ---
-NAMESPACE = "formazione-sou"  # Sostituisci con il namespace corretto
-DEPLOYMENT_NAME = "flask-app-release-flask-app-chart" # Sostituisci con il nome del tuo Deployment
+# Dettagli del Deployment 
+NAMESPACE = "formazione-sou"
+DEPLOYMENT_NAME = "flask-app-release-flask-app-chart" 
 
 def export_deployment_details():
-    # client.AppsV1Api() è l'API per lavorare con Deployment, DaemonSet, ecc.
-    apps_v1 = client.AppsV1Api()
-
     try:
-        # Recupera l'oggetto Deployment
+        # Tenta di caricare la configurazione in-cluster (Service Account)
+        config.load_incluster_config()
+    except config.config_exception.ConfigException:
+        # Se fallisce, carica il kubeconfig locale
+        config.load_kube_config()
+    
+    apps_v1 = client.AppsV1Api()
+    
+    try:
         deployment = apps_v1.read_namespaced_deployment(name=DEPLOYMENT_NAME, namespace=NAMESPACE)
+        container = deployment.spec.template.spec.containers[0]
         
-        # --- Export dei Dettagli Chiave ---
-        
-        # 1. Metadati
-        metadata = {
-            "name": deployment.metadata.name,
-            "namespace": deployment.metadata.namespace,
-            "uid": deployment.metadata.uid,
-            "creation_timestamp": str(deployment.metadata.creation_timestamp)
-        }
-        
-        # 2. Stato (Status)
-        status = {
-            "replicas_desired": deployment.spec.replicas,
-            "replicas_ready": deployment.status.ready_replicas,
-            "replicas_updated": deployment.status.updated_replicas,
-            "available_replicas": deployment.status.available_replicas
-        }
+        # Controllo che ci siano tutte le specifiche
+        validation_errors = []
 
-        # 3. Specifiche del Container (Immagine)
-        # Prende il primo container definito nel template del pod
-        image_spec = deployment.spec.template.spec.containers[0]
-        container_details = {
-            "container_name": image_spec.name,
-            "image": image_spec.image,
-            "ports": [p.container_port for p in image_spec.ports] if image_spec.ports else "N/D"
-        }
-        
-        # Assembla l'output
-        export_data = {
-            "metadata": metadata,
-            "status": status,
-            "container": container_details,
-            # Puoi esportare l'intero oggetto come JSON se necessario:
-            # "full_spec": deployment.to_dict() 
-        }
+        # 1. Verifica Liveness Probe
+        if not container.liveness_probe:
+            validation_errors.append("Manca il Liveness Probe.")
 
-        print("\n--- Dettagli Deployment Esportati ---")
-        print(json.dumps(export_data, indent=2))
+        # 2. Verifica Readiness Probe
+        if not container.readiness_probe:
+            validation_errors.append("Manca il Readiness Probe.")
+
+        # 3. Verifica Limits & Requests (Risorse)
+        # Controlla che il blocco resources esista e che limits/requests non siano None
+        if not container.resources or not container.resources.limits or not container.resources.requests:
+            validation_errors.append("Mancano Limits e/o Requests (risorse).")
+        
+        # Gestisce errore in caso manchi qualcosa
+        if validation_errors:
+            error_message = "\n".join(validation_errors)
+            # Solleva un'eccezione standard con il messaggio dettagliato di cosa manca
+            raise Exception(f"Il Deployment ha fallito le verifiche essenziali:\n{error_message}")
+        
+        # Se la validazione ha successo, esegue l'export
+        
+        # ... (Codice per l'export dei dati JSON) ...
+
+        print("\nVALIDAZIONE SUPERATA. Dettagli Deployment Esportati:")
+        print(json.dumps({
+            "metadata": {"name": deployment.metadata.name},
+            "status": {"replicas_ready": deployment.status.ready_replicas}
+        }, indent=2))
         
     except client.ApiException as e:
-        # Gestisce gli errori, ad esempio "Forbidden" se il Service Account non ha permessi sufficienti
-        print(f"Errore durante l'accesso al Deployment: {e}")
-        print(f"Verifica che il Service Account 'cluster-reader' abbia i permessi di lettura su Deployment nel namespace {NAMESPACE}.")
-        
+        # Cattura errori di comunicazione o permessi (es. 403 Forbidden)
+        print(f"Errore API durante l'accesso al Deployment: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        # Cattura l'eccezione standard (inclusi gli errori di validazione sollevati sopra)
+        print(f"\nFATAL: Errore di Validazione/Esecuzione:\n{e}", file=sys.stderr)
+        sys.exit(1) # Forza l'uscita con codice di errore, facendo fallire Jenkins
 
 if __name__ == "__main__":
     export_deployment_details()
