@@ -38,22 +38,21 @@ service:
   type: ClusterIP
   port: 8000
 
+
+
 ingress:
   enabled: true
   className: "nginx"
-  annotations: {}
+  annotations:
     kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
   hosts:
     - host: formazionesou.local
       paths:
         - path: /
-          pathType: Prefix 
+          pathType: Prefix
   tls: []
-  #  - secretName: chart-example-tls
-  #    hosts:
-  #      - chart-example.local
-
+  
 httpRoute:
   enabled: false
   annotations: {}
